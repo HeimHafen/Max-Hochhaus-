@@ -1,3 +1,4 @@
+import {addLift} from './lift.js';
 import * as T from './vendor/three.module.js';
 import {buildTower,count,heightAt,move} from './tower.js';
 
@@ -34,7 +35,7 @@ function run(){
  const sun=new T.DirectionalLight(0xffce9c,1.65);
  sun.position.set(36,30,38);
  scene.add(sun);
- const nav=buildTower(T,scene);
+ const nav=buildTower(T,scene),lift=addLift(T,scene,nav);
  for(const x of [-10,0,9,14]){
   const light=new T.PointLight(0xffb769,97,14,2);
   light.position.set(x,3.9,9);scene.add(light);
@@ -45,9 +46,10 @@ function run(){
  camera.rotation.order='YXZ';
  const menu=document.querySelector('#menu'), button=document.querySelector('#places'), selector=document.querySelector('#floor');
  const label=document.querySelector('#position');
- const floorTitle=i=>i===0?'Lobby':i===count-1?'Aussichtsetage':'Etage '+(i+1);
+ const floorTitle=i=>i===0?'Lobby':i===count-1?'50. Etage · Aussicht':'Etage '+(i+1);
  for(let i=0;i<count;i++)selector.add(new Option(floorTitle(i),i));
- let p, yaw, pitch, eye;
+ let p, yaw, pitch, eye, choosingLift=false;
+ const liftButton=document.querySelector('#lift'),go=document.querySelector('#go');
  const contacts=new Map(),keys=new Set();
  const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');};
  function point(x,y,z,angle,tilt){
@@ -56,9 +58,21 @@ function run(){
  }
  function plaza(){point(42,0,118,.342,.49);}
  plaza();
- button.onclick=()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));contacts.clear();};
+ button.onclick=()=>{if(lift.moving&&lift.inside(p))return;choosingLift=false;go.textContent='Betreten';menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));contacts.clear();};
  document.querySelector('#plaza').onclick=plaza;
- document.querySelector('#go').onclick=()=>point(4,heightAt(Number(selector.value)),10.45,-.8,0);
+ const floorIndex=y=>y<6?0:Math.min(count-1,1+Math.floor((y-6+.01)/3.8));
+ go.onclick=()=>{
+  const target=Number(selector.value);
+  if(choosingLift){lift.request(target,true);close();}
+  else point(4,heightAt(target),10.45,-.8,0);
+ };
+ liftButton.onclick=()=>{
+  if(lift.moving)return;
+  if(lift.inside(p)){
+   choosingLift=true;selector.value=lift.current;go.textContent='Fahren';
+   menu.hidden=false;button.setAttribute('aria-expanded','true');contacts.clear();
+  }else lift.request(floorIndex(p.y));
+ };
  canvas.onpointerdown=e=>{
   if(!menu.hidden){close();return;}
   canvas.setPointerCapture(e.pointerId);
@@ -86,7 +100,9 @@ function run(){
  let last=performance.now();
  renderer.setAnimationLoop(now=>{
   const dt=Math.min((now-last)/1000,.04);last=now;
-  if(menu.hidden){
+  lift.update(dt,p);
+  const inside=lift.inside(p);
+  if(menu.hidden&&!(inside&&lift.moving)){
    let f=Number(keys.has('KeyW'))-Number(keys.has('KeyS')),s=Number(keys.has('KeyD'))-Number(keys.has('KeyA'));
    for(const touch of contacts.values())if(touch.walk){f+=touch.f;s+=touch.s;}
    const scale=dt*3.9/Math.max(1,Math.hypot(f,s));
@@ -97,7 +113,10 @@ function run(){
   eye+=(p.y+1.65-eye)*Math.min(1,dt*16);
   camera.position.set(p.x,eye,p.z);sky.position.copy(camera.position);camera.rotation.set(pitch,yaw,0);
   const level=p.y<6?0:Math.min(count-1,1+Math.floor((p.y-6+.01)/3.8));
-  const location=Math.abs(p.x)>16||Math.abs(p.z)>12?'Vorplatz':p.x>8.22&&p.z>1.25?'Treppenhaus · '+floorTitle(level):floorTitle(level);
+  liftButton.hidden=!menu.hidden||(!inside&&!lift.near(p));
+  liftButton.disabled=lift.moving||(lift.near(p)&&lift.current===level);
+  liftButton.textContent=lift.moving?(inside?'Aufzug fährt':'Aufzug unterwegs'):inside?'Etage wählen':lift.current===level?'Aufzug bereit':'Aufzug rufen';
+  const location=inside?'Glasaufzug · '+floorTitle(level):Math.abs(p.x)>16||Math.abs(p.z)>12?'Vorplatz':p.x>8.22&&p.z>1.25?'Treppenhaus · '+floorTitle(level):floorTitle(level);
   if(label.textContent!==location)label.textContent=location;
   renderer.render(scene,camera);
  });

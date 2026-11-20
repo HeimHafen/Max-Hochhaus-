@@ -12,10 +12,10 @@ export function buildTower(T, scene) {
  const foliage=mat(0x394632,.92);
  const lamp=mat(0xffc487,.35,{emissive:0xffad5d,emissiveIntensity:1.18});
  const glazing=mat(0x729bd2,.24,{transparent:true,opacity:.22,depthWrite:false});
- const panels=[0x172b48,0x243957,0x344761,0x5c4b3b].map((color,index)=>mat(color,.29,{
-  transparent:true,opacity:index===3?.68:.79,depthWrite:false,
-  emissive:index===3?0x6e411f:0x102538,emissiveIntensity:index===3?.43:.26
+ const panels=[0x7194bf,0x789fcb,0x82a7d2,0x9e8c78].map(color=>mat(color,.22,{
+  transparent:true,opacity:.20,depthWrite:false,side:T.DoubleSide
  }));
+ glazing.side=T.DoubleSide;
  function box(material,x,y,z,w,h,d,rotation=0){
   if(!batches.has(material))batches.set(material,[]);
   batches.get(material).push([x,y,z,w,h,d,rotation]);
@@ -75,13 +75,21 @@ export function buildTower(T, scene) {
     const x=-14.63+col*2.66;
     if(front&&(x>8 || level===0&&Math.abs(x)<3))continue;
     const material=level===0||level===count-1?glazing:panels[(col*7+level*13+(front?1:0))%11<2?3:(col+level)%3];
-    box(material,x,y+h/2,z,2.56,h-.23,.055);
+    const paneLeft=x-1.28,paneRight=x+1.28;
+    if(!front&&paneLeft<1.16&&paneRight>-1.16){
+     for(const [left,right] of [[paneLeft,Math.min(paneRight,-1.16)],[Math.max(paneLeft,1.16),paneRight]]){
+      if(right>left)box(material,(left+right)/2,y+1.34,z,right-left,2.68,.055);
+     }
+     box(material,x,y+(h+2.68)/2,z,2.56,h-2.68,.055);
+    }else box(material,x,y+h/2,z,2.56,h-.23,.055);
     if(level>0&&(col*17+level*7)%9<2){
      box(lamp,x,y+h-.58,z*.81,1.50,.065,.12);
     }
    }
    if(front&&level===0){
     for(const x of [-9.48,9.48])box(bronze,x,y+.10,z,13.19,.18,.30);
+   }else if(!front){
+    for(const x of [-8.63,8.63])box(bronze,x,y+.10,z,14.93,.18,.30);
    }else box(bronze,0,y+.10,z,32.15,.18,.30);
   }
   for(const x of [-16,16]){
@@ -97,6 +105,7 @@ export function buildTower(T, scene) {
  }
  for(const z of [-12.04,12.04])for(let i=0;i<=12;i++){
   const x=-16+i*32/12;
+  if(z<0&&Math.abs(x)<1.17)continue;
   if(z>0&&Math.abs(x)<3.1) {
    box(bronze,x,(top+3.9)/2,z,.15,top-3.9,.20);
   } else box(bronze,x,top/2,z,.15,top,.20);
@@ -115,7 +124,8 @@ export function buildTower(T, scene) {
  for(const x of [-4.0,4.0])box(bronze,x,2.05,14.1,.16,4.1,.16);
  barrier(-16.15,-15.8,-12.14,12.14,0,top);
  barrier(15.8,16.15,-12.14,12.14,0,top);
- barrier(-16.15,16.15,-12.14,-11.8,0,top);
+ barrier(-16.15,-1.16,-12.14,-11.8,0,top);
+ barrier(1.16,16.15,-12.14,-11.8,0,top);
  for(const [l,r] of [[-16.15,-2.8],[2.8,16.15]])barrier(l,r,11.8,12.14,0,top);
  barrier(-2.8,2.8,11.8,12.14,3.55,top);
  slab(-110,110,12,135,0,dark,.08);
@@ -170,7 +180,9 @@ export function move(nav, p, x, z) {
  }
  if(!Number.isFinite(y))return p;
  const rad=.22;
- if(nav.walls.some(([l,r,b,f,min,max])=>
-  x+rad>l&&x-rad<r&&z+rad>b&&z-rad<f&&y+.043<max&&y+1.65>min))return p;
+ if(nav.walls.some(wall=>{
+  if(wall===nav.liftGate&&nav.liftOpening===y)return false;
+  const [l,r,b,f,min,max]=wall;
+  return x+rad>l&&x-rad<r&&z+rad>b&&z-rad<f&&y+.043<max&&y+1.65>min;}))return p;
  return {x,y,z};
 }
